@@ -5,12 +5,10 @@ from openai import OpenAI
 st.set_page_config(page_title="寓蟄 | 空間設計視覺提案工具", layout="wide")
 
 # --- 1. OpenAI API 設定 (從 Streamlit Secrets 讀取) ---
-# 部署至 GitHub 並連結 Streamlit Cloud 時，請在 Settings > Secrets 加入 OPENAI_API_KEY
 api_key = st.secrets.get("OPENAI_API_KEY")
 
 if not api_key:
-    st.sidebar.warning("🔑 尚未設定 API Key。請在 Secrets 中設定 OPENAI_API_KEY 以啟用 AI 繪圖功能。")
-    # 若為本地開發測試，可手動輸入
+    st.sidebar.warning("🔑 尚未設定 API Key。請在 Secrets 中設定 OPENAI_API_KEY。")
     api_key = st.sidebar.text_input("或手動輸入 API Key 用於測試", type="password")
 
 client = OpenAI(api_key=api_key) if api_key else None
@@ -19,10 +17,11 @@ client = OpenAI(api_key=api_key) if api_key else None
 st.markdown(f"""
     <style>
     .stApp {{ background-color: #9c9e88; }}
-    div.stButton > button:first-child {{
+    div.stButton > button {{
         background-color: #FFBF00; color: white; border-radius: 5px;
         border: none; padding: 0.7rem 2.5rem; font-weight: bold;
         font-size: 18px; box-shadow: 0px 4px 10px rgba(0,0,0,0.1);
+        width: 100%;
     }}
     [data-testid="stVerticalBlock"] > div {{
         background-color: rgba(255, 255, 255, 0.1); padding: 10px; border-radius: 10px;
@@ -120,25 +119,24 @@ st.divider()
 
 # --- 第五階段：軟裝家具 ---
 st.subheader("🛋️ 家具配置")
-f_options = ["三人沙發", "雙人沙發", "單人扶手椅", "電視櫃", "圓形茶几", "長型餐桌", "中島吧台", "單人床", "雙人床", "床頭櫃", "鞋櫃", "梳妝台", "全身鏡", "衣桿", "開放式書架", "落地燈", "大型植栽"]
+f_options = ["三人沙發", "雙人沙發", "櫃台", "展示架", "單人扶手椅", "電視櫃", "圓形茶几", "長型餐桌", "中島吧台", "單人床", "雙人床", "床頭櫃", "鞋櫃", "梳妝台", "全身鏡", "衣桿", "開放式書架", "落地燈", "大型植栽"]
 f_items = st.multiselect("選擇家具 (可多選)", f_options)
 f_mat = st.text_input("家具主要材質描述", value="木質、棉麻、消光金屬")
 other_note = st.text_area("其他特殊要求", value="無其他要求")
 
-# --- 生成按鈕邏輯 ---
-if st.button("🚀 生成寓蟄視覺提案提詞"):
-    areas_str = "、".join(target_areas)
-    styles_str = "、".join(selected_styles)
-    floor_str = "、".join(f_selected_mats) if f_selected_mats else "未指定"
-    wall_desc_list = []
-    for idx, w in enumerate(wall_data):
-        m_str = "、".join(w['mat'])
-        d_str = "、".join([item for item in w['deco'] if item != "裝飾" and item != "無"])
-        wall_desc_list.append(f"牆面{idx+1}(材質：{m_str}，顏色：{w['color']}，裝飾：{d_str if d_str else '簡潔'})")
-    wall_final = "；".join(wall_desc_list)
-    mood_str = "、".join(selected_moods)
+# --- 6. 提詞組合邏輯 ---
+areas_str = "、".join(target_areas)
+styles_str = "、".join(selected_styles)
+floor_str = "、".join(f_selected_mats) if f_selected_mats else "未指定"
+wall_desc_list = []
+for idx, w in enumerate(wall_data):
+    m_str = "、".join(w['mat'])
+    d_str = "、".join([item for item in w['deco'] if item != "裝飾" and item != "無"])
+    wall_desc_list.append(f"牆面{idx+1}(材質：{m_str}，顏色：{w['color']}，裝飾：{d_str if d_str else '簡潔'})")
+wall_final = "；".join(wall_desc_list)
+mood_str = "、".join(selected_moods)
 
-    full_prompt = f"""你是一名空間設計師，根據以下內容生成一張空間設計配置圖
+full_prompt = f"""你是一名空間設計師，根據以下內容生成一張空間設計配置圖
 畫面為16:9橫式照片，並生產出超高擬真品質，具8K畫質的專業3D渲染圖。。
 【空間描述】核心風格：{styles_str}。渲染區域：{areas_str}。
 【空間性質】此處為{space_type}（{brand_name if space_type == '店家' else ''}），類型為{shop_type}。
@@ -155,22 +153,36 @@ if st.button("🚀 生成寓蟄視覺提案提詞"):
 【技術規範】高品質渲染、8K解析度、室內設計雜誌質感、極致細節、寫實陰影。
 【備註】{other_note}"""
 
+# --- 7. 按鈕版面 ---
+col_gen, col_reg = st.columns(2)
+with col_gen:
+    generate_btn = st.button("🚀 生成寓蟄視覺提案與 3 張圖")
+with col_reg:
+    regenerate_btn = st.button("🔄 重新生成圖片 (維持目前設定)")
+
+# --- 8. 執行生成 ---
+if generate_btn or regenerate_btn:
     st.markdown("### 生成結果 (請點擊右上方複製按鈕)")
     st.code(full_prompt, language=None)
 
-    # AI 繪圖功能
     if client:
-        with st.spinner("寓蟄 AI 正在根據提案繪製 3D 渲染圖..."):
+        with st.spinner("寓蟄 AI 正在平行繪製 3 組空間方案..."):
             try:
-                response = client.images.generate(
-                    model="dall-e-3",
-                    prompt=f"Professional interior design rendering, architectural photography style: {full_prompt}",
-                    size="1024x1024",
-                    quality="hd",
-                    n=1,
-                )
-                image_url = response.data[0].url
-                st.image(image_url, caption="寓蟄 AI 生成視覺提案圖")
+                # 建立三欄顯示圖片
+                img_cols = st.columns(3)
+                for i in range(3):
+                    with img_cols[i]:
+                        # 呼叫 OpenAI API
+                        response = client.images.generate(
+                            model="dall-e-3",
+                            prompt=f"Professional interior design rendering, architectural photography style, variety version {i+1}: {full_prompt}",
+                            size="1024x1024",
+                            quality="hd",
+                            n=1,
+                        )
+                        image_url = response.data[0].url
+                        st.image(image_url, caption=f"視覺方案 {i+1}", use_column_width=True)
+                st.success("✅ 三組視覺提案已生成完成！")
             except Exception as e:
                 st.error(f"圖片生成失敗：{e}")
     else:
